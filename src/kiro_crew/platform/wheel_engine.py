@@ -1138,6 +1138,24 @@ def apply_wheel_update(
             release_update_lock(lock_fd)
 
 
+def check_policy_channel(channel: str) -> None:
+    """Refuse a wheel update from *channel* when the policy requires another one.
+
+    The one channel-pin check every wheel install passes: :func:`apply_wheel_update`
+    runs it under the update lock before anything is downloaded, whichever route
+    called it (dashboard approve, scheduled auto-apply, ``kirocrew server update``),
+    and the approve route asks it early too, so its refusal names the policy. The
+    caller picked *channel* when it read the feed or armed the request; an
+    ``updates.channel`` pin installed since then decides (``update_layout``
+    ``policy_release_channel``), as the source pin does.
+    """
+    from kiro_crew.platform.update_layout import policy_release_channel
+
+    required = policy_release_channel()
+    if required and channel != required:
+        raise WheelUpdateError(f"updates on this host follow the {required} channel")
+
+
 def _check_buildable(payload: dict[str, str]) -> None:
     """Refuse, before any download, a release the SIGNED metadata excludes here."""
     from kiro_crew.dep_sync import python_floor_breach
@@ -1223,6 +1241,7 @@ def _apply_locked(
             (expected_tree / _SHADOW_SENTINEL).unlink(missing_ok=True)
         repoint_launcher_symlink(layout)
         return expected_tree
+    check_policy_channel(channel)
     preflight()
     with tempfile.TemporaryDirectory(prefix="kirocrew-update-", dir=str(_staging_dir())) as tmp:
         workdir = Path(tmp)
