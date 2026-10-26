@@ -15,7 +15,7 @@ import inspect
 import sys
 import threading
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from slack_gateway_helpers import _restore_update_check_cache  # noqa: F401
@@ -233,9 +233,9 @@ class TestAutoApplyUpdate:
                 with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as spawn:
                     await orch._auto_apply_update()
         # The env read is the gate: nothing past it, not even the git lookup, runs.
-        resolve_git.assert_not_called()
-        spawn.assert_not_awaited()
-        ds.push_update_progress.assert_not_called()
+        assert resolve_git.call_count == 0
+        assert spawn.await_count == 0
+        assert ds.push_update_progress.call_count == 0
 
     @pytest.mark.asyncio
     async def test_non_mainline_branch_skips(self):
@@ -307,9 +307,9 @@ class TestAutoApplyUpdate:
             # flake-ok: pre-existing unbounded await of the serving probe, moved verbatim; tracked for a de-flake pass
             await serving
 
-        orch.dashboard_state.push_update_progress.assert_called_once_with(
-            "failed", "Restart failed — run: kirocrew restart"
-        )
+        assert orch.dashboard_state.push_update_progress.call_args_list == [
+            call("failed", "Restart failed — run: kirocrew restart")
+        ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1280,7 +1280,7 @@ class TestCheckMissingDepsPip:
         with patch("kiro_crew.kiro_cli.resolve_kiro_cli", return_value="/opt/pinned/bin/kiro-cli"):
             with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
                 await orch._warn_if_kiro_cli_outdated()  # must not raise
-        proc.kill.assert_called_once()
+        assert proc.kill.call_count == 1
 
     @pytest.mark.asyncio
     async def test_pip_install_cancellation_kills_child(self):

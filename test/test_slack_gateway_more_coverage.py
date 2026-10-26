@@ -42,7 +42,7 @@ import time
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -330,7 +330,7 @@ class TestWarnIfKiroCliOutdated:
                 AsyncMock(side_effect=ProcessLookupError),
             ):
                 await orch._warn_if_kiro_cli_outdated()  # must not raise
-        proc.kill.assert_called_once()
+        assert proc.kill.call_count == 1
 
     @pytest.mark.asyncio
     async def test_outdated_version_warns(self, capsys):
@@ -402,8 +402,8 @@ class TestDeliverResultRouting:
         orch.slack = _mock_slack()
         await orch._deliver_result("Title", "task", "result", deliver)
         # The dashboard arm returns early; the default Slack-DM arm never runs.
-        orch.slack.open_dm.assert_not_awaited()
-        orch.slack.post_message.assert_not_awaited()
+        assert orch.slack.open_dm.await_count == 0
+        assert orch.slack.post_message.await_count == 0
 
     @pytest.mark.asyncio
     async def test_slack_only_arm_posts_dm_without_notifying(self):
@@ -425,8 +425,8 @@ class TestDeliverResultRouting:
         orch.slack = _mock_slack()
         orch.slack.open_dm = AsyncMock(side_effect=RuntimeError("slack down"))
         await orch._deliver_result("Title", "task", "result", "slack")
-        orch.slack.open_dm.assert_awaited_once_with("U_OWNER")
-        orch.slack.post_message.assert_not_awaited()
+        assert orch.slack.open_dm.await_args_list == [call("U_OWNER")]
+        assert orch.slack.post_message.await_count == 0
 
     @pytest.mark.asyncio
     async def test_slack_channel_arm_without_ts_posts_to_the_channel(self, monkeypatch):
@@ -468,9 +468,9 @@ class TestDeliverResultRouting:
         orch.slack = _mock_slack(dm=None)
         with _slack_default_deliver():
             await orch._deliver_result("Title", "task", "result", "")
-        orch.slack.open_dm.assert_awaited_once_with("U_OWNER")
-        orch.slack.post_message.assert_not_awaited()
-        ds.notify.assert_called_once_with("heartbeat", "Title", "task\n\nresult")
+        assert orch.slack.open_dm.await_args_list == [call("U_OWNER")]
+        assert orch.slack.post_message.await_count == 0
+        assert ds.notify.call_args_list == [call("heartbeat", "Title", "task\n\nresult")]
 
     @pytest.mark.asyncio
     async def test_default_arm_notifies_after_post_failure(self):
@@ -549,8 +549,8 @@ class TestShutdownExtras:
         ):
             await orch._shutdown()
         # Teardown continued past the failed save.
-        ds.file_indexes.stop_all.assert_called_once_with()
-        orch._stop_mcp_broker.assert_awaited_once()
+        assert ds.file_indexes.stop_all.call_args_list == [call()]
+        assert orch._stop_mcp_broker.await_count == 1
 
     @pytest.mark.asyncio
     async def test_a_pending_eager_spawn_ends_inside_the_shutdown(self):
@@ -920,7 +920,7 @@ class TestAutoMigrateMemory:
             "kiro_crew.dashboard.handlers.memory._set_migrated", AsyncMock()
         ) as set_migrated:
             await orch._set_memory_migrated(True)
-        set_migrated.assert_awaited_once_with(True)
+        assert set_migrated.await_args_list == [call(True)]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1581,7 +1581,7 @@ class TestPersistSlotTitle:
         slot.key = "chat-1"
         with patch("asyncio.to_thread", AsyncMock()) as to_thread:
             await orch._persist_slot_title(slot)
-        to_thread.assert_not_awaited()
+        assert to_thread.await_count == 0
 
     @pytest.mark.asyncio
     async def test_write_failure_is_best_effort(self, caplog):

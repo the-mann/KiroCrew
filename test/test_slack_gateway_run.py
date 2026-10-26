@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from slack_gateway_helpers import _restore_update_check_cache  # noqa: F401
@@ -179,9 +179,9 @@ class TestRunMethod:
         finally:
             kiro_crew.shutdown_event.clear()
 
-        orch._init_services.assert_called_once()
-        orch._init_cron.assert_awaited_once()
-        orch._shutdown.assert_awaited_once()
+        assert orch._init_services.call_count == 1
+        assert orch._init_cron.await_count == 1
+        assert orch._shutdown.await_count == 1
 
     @pytest.mark.asyncio
     async def test_run_no_dashboard_uses_api_server(self, tmp_path, monkeypatch):
@@ -599,7 +599,7 @@ class TestRunSignalAndBgSession:
         finally:
             pass
 
-        orch._start_embeddings.assert_awaited_once()
+        assert orch._start_embeddings.await_count == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -683,7 +683,7 @@ class TestBgSessionDashboardBranch:
                                                                 # flake-ok: pre-existing event-loop yield, the second of the pair, moved verbatim; tracked for a de-flake pass
                                                                 await asyncio.sleep(0)
 
-        orch.sessions.start_pool.assert_awaited_once_with(blocking=False)
+        assert orch.sessions.start_pool.await_args_list == [call(blocking=False)]
 
     @pytest.mark.asyncio
     async def test_dashboard_url_is_printed_before_the_mcp_probe_is_awaited(self):
@@ -852,7 +852,7 @@ class TestBgSessionDashboardBranch:
                                                             await asyncio.sleep(0)
 
         # Boot carried on past the failed announcement.
-        orch.sessions.start_pool.assert_awaited_once_with(blocking=False)
+        assert orch.sessions.start_pool.await_args_list == [call(blocking=False)]
 
 
 class TestInitServicesLoopResponsiveness:

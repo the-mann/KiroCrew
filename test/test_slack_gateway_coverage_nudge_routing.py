@@ -12,7 +12,7 @@ import asyncio
 import json
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from slack_gateway_coverage_helpers import (
@@ -337,7 +337,7 @@ class TestAutonudgeRouterAndObserver:
 
         loop = _loop("chat-1-1721")
         observer("expired", loop)
-        orch._notify_nudge_expired.assert_called_once_with(loop)
+        assert orch._notify_nudge_expired.call_args_list == [call(loop)]
 
     @pytest.mark.asyncio
     async def test_observer_notifies_one_structured_terminal_transition(self):
@@ -361,7 +361,7 @@ class TestAutonudgeRouterAndObserver:
         # flake-ok: pre-existing zero yield that lets the task the observer or startup schedules run before the next assertion; moved verbatim, tracked for a de-flake pass
         await asyncio.sleep(0)
 
-        orch._notify_nudge_expired.assert_called_once_with(loop)
+        assert orch._notify_nudge_expired.call_args_list == [call(loop)]
 
     @pytest.mark.asyncio
     async def test_observer_marks_delivery_only_after_notification_persistence(self):
@@ -386,16 +386,14 @@ class TestAutonudgeRouterAndObserver:
         # flake-ok: pre-existing zero yield that lets the task the observer or startup schedules run before the next assertion; moved verbatim, tracked for a de-flake pass
         await asyncio.sleep(0)
 
-        inst.mark_terminal_notification_delivered.assert_not_awaited()
+        assert inst.mark_terminal_notification_delivered.await_count == 0
         persisted.set_result(True)
         # flake-ok: pre-existing zero yield that lets the task the observer or startup schedules run before the next assertion; moved verbatim, tracked for a de-flake pass
         await asyncio.sleep(0)
 
-        inst.mark_terminal_notification_delivered.assert_awaited_once_with(
-            loop.id,
-            MonitorOutcome.SUCCESS,
-            2.0,
-        )
+        assert inst.mark_terminal_notification_delivered.await_args_list == [
+            call(loop.id, MonitorOutcome.SUCCESS, 2.0)
+        ]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("persistence_result", [False, RuntimeError("write failed")])
@@ -502,7 +500,7 @@ class TestAutonudgeRouterAndObserver:
         # flake-ok: pre-existing zero yield that lets the task the observer or startup schedules run before the next assertion; moved verbatim, tracked for a de-flake pass
         await asyncio.sleep(0)
 
-        orch._notify_nudge_expired.assert_called_once_with(loop)
+        assert orch._notify_nudge_expired.call_args_list == [call(loop)]
 
     @pytest.mark.asyncio
     async def test_restart_deduplicates_terminal_notice_with_delivery_record(self):
@@ -524,8 +522,8 @@ class TestAutonudgeRouterAndObserver:
 
         observer("updated", loop)
 
-        orch._notify_nudge_expired.assert_not_called()
-        inst.mark_terminal_notification_delivered.assert_not_awaited()
+        assert orch._notify_nudge_expired.call_count == 0
+        assert inst.mark_terminal_notification_delivered.await_count == 0
 
     @pytest.mark.asyncio
     async def test_observer_does_not_repeat_a_gated_legacy_terminal_notification(self):
@@ -548,7 +546,7 @@ class TestAutonudgeRouterAndObserver:
         observer("expired", loop)
         observer("fired", loop)
 
-        orch._notify_nudge_expired.assert_called_once_with(loop)
+        assert orch._notify_nudge_expired.call_args_list == [call(loop)]
 
     @pytest.mark.asyncio
     async def test_observer_without_loop_broadcasts_nothing(self):
@@ -557,7 +555,7 @@ class TestAutonudgeRouterAndObserver:
         _on_fire, observer, _inst = await self._wire(orch)
 
         observer("stopped", None)
-        orch.dashboard_state.broadcast_ws.assert_not_called()
+        assert orch.dashboard_state.broadcast_ws.call_count == 0
 
 
 # ═════════════════════════════════════════════════════════════════════════

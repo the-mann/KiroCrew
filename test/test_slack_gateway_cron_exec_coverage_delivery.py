@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from slack_gateway_cron_exec_coverage_helpers import (
@@ -543,8 +543,10 @@ class TestTaskNotifyChannelRouting:
         with patch.object(orch, "_deliver_channel_reply", deliver):
             await notify("Task 3 requires approval", "run the deploy?", "t-3", session_key=_TG_KEY)
 
-        deliver.assert_awaited_once_with(_TG_KEY, "*Task 3 requires approval*\nrun the deploy?")
-        orch.slack.post_message.assert_not_awaited()
+        assert deliver.await_args_list == [
+            call(_TG_KEY, "*Task 3 requires approval*\nrun the deploy?")
+        ]
+        assert orch.slack.post_message.await_count == 0
 
     @pytest.mark.asyncio
     async def test_owner_dm_is_the_fallback_when_the_channel_refuses(self):
@@ -574,10 +576,10 @@ class TestTaskNotifyChannelRouting:
         with patch.object(orch, "_deliver_channel_reply", deliver):
             await notify("Task 3 requires approval", "run the deploy?", "t-3")
 
-        deliver.assert_not_awaited()
-        orch.slack.post_message.assert_awaited_once_with(
-            "D1", "*Task 3 requires approval*\nrun the deploy?"
-        )
+        assert deliver.await_count == 0
+        assert orch.slack.post_message.await_args_list == [
+            call("D1", "*Task 3 requires approval*\nrun the deploy?")
+        ]
 
     @pytest.mark.asyncio
     async def test_ordinary_progress_title_notifies_neither(self):

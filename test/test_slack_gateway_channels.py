@@ -222,7 +222,7 @@ class TestUnreadyChannelBadge:
         orch._cfg.load_credentials = MagicMock(return_value={})
         orch._badge_unready_channels(boot)
         # The missing dashboard is the gate: the credential store is never read.
-        orch._cfg.load_credentials.assert_not_called()
+        assert orch._cfg.load_credentials.call_count == 0
 
 
 class TestChannelTransportStartGate:
@@ -325,10 +325,10 @@ class TestChannelTransportStartGate:
             mocks = self._patch_starts(stack)
             await orch._start_channel_transports(descriptors=self._descriptors)
 
-        mocks["wecom"].assert_awaited_once()
-        mocks["telegram"].assert_awaited_once()
-        mocks["discord"].assert_awaited_once()
-        mocks["webex"].assert_awaited_once()
+        assert mocks["wecom"].await_count == 1
+        assert mocks["telegram"].await_count == 1
+        assert mocks["discord"].await_count == 1
+        assert mocks["webex"].await_count == 1
 
     @pytest.mark.asyncio
     async def test_host_profile_deny_skips_transport(self, tmp_path, monkeypatch):

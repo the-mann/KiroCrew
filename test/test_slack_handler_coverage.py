@@ -1200,7 +1200,7 @@ class TestThreadOverrideHydration:
         log = _metadata_log(lambda _key: {})
         await h._hydrate_thread_overrides("t1", log)
         await h._hydrate_thread_overrides("t1", log)
-        log.get_metadata_status.assert_called_once()
+        assert log.get_metadata_status.call_count == 1
 
     @pytest.mark.asyncio
     async def test_without_log_only_marks_hydrated(self):

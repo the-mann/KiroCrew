@@ -15,7 +15,7 @@ import logging
 import os
 import threading
 from dataclasses import replace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from slack_gateway_helpers import _restore_update_check_cache  # noqa: F401
@@ -207,9 +207,9 @@ class TestAutoApplyUpdateResetPath:
                                 await orch._auto_apply_update()
 
         # Frontend build+stage runs, and the package is reinstalled.
-        mock_build.assert_awaited()
-        ds.push_update_progress.assert_any_call("building", "Building frontend…")
-        ds.push_update_progress.assert_any_call("building", "Rebuilding package…")
+        assert mock_build.await_count >= 1
+        assert call("building", "Building frontend…") in ds.push_update_progress.call_args_list
+        assert call("building", "Rebuilding package…") in ds.push_update_progress.call_args_list
 
     @pytest.mark.asyncio
     async def test_the_kas_bundle_route_skips_the_kiro_cli_update_and_says_why(self, caplog):

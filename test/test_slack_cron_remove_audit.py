@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -76,8 +76,8 @@ class TestSlackSingleRemoveAudit:
         svc.remove_job_async = AsyncMock(return_value=True)
         with patch("kiro_crew.messaging.commands.sel") as mock_sel:
             await h._handle_cron_command("cron remove j1", svc, "C", "t")
-        svc.remove_job_async.assert_awaited_once_with("j1", actor="slack", source="slack")
-        mock_sel.return_value.log_api_access.assert_not_called()
+        assert svc.remove_job_async.await_args_list == [call("j1", actor="slack", source="slack")]
+        assert mock_sel.return_value.log_api_access.call_count == 0
 
     @pytest.mark.asyncio
     async def test_busy_store_audits_nothing(self):
@@ -131,8 +131,8 @@ class TestSlackRemoveAllAudit:
         svc.remove_jobs = AsyncMock(return_value=([], ["j1"]))
         with patch("kiro_crew.messaging.commands.sel") as mock_sel:
             await mc.cron_remove_all_reply(svc, source="slack", caller="U123")
-        svc.remove_jobs.assert_awaited_once_with(["j1"], actor="U123", source="slack")
-        mock_sel.return_value.log_api_access.assert_not_called()
+        assert svc.remove_jobs.await_args_list == [call(["j1"], actor="U123", source="slack")]
+        assert mock_sel.return_value.log_api_access.call_count == 0
 
     @pytest.mark.asyncio
     async def test_busy_store_audits_nothing(self):
@@ -410,8 +410,8 @@ class TestGatewayDoneRemovalAudit:
         gw = _make_gw()
         job = _make_script_job()
         await _run_done_callback(gw, job, remove_side_effect=CronStoreBusy("busy"))
-        gw.cron_svc.defer_removal.assert_called_once_with("sj1")
-        gw.cron_svc.audit_one_shot_removal.assert_not_called()
+        assert gw.cron_svc.defer_removal.call_args_list == [call("sj1")]
+        assert gw.cron_svc.audit_one_shot_removal.call_count == 0
 
     @pytest.mark.asyncio
     async def test_unreadable_store_defers_without_gateway_audit(self):
@@ -425,8 +425,8 @@ class TestGatewayDoneRemovalAudit:
         gw = _make_gw()
         job = _make_script_job()
         await _run_done_callback(gw, job, remove_side_effect=CronStoreUnreadable("unreadable"))
-        gw.cron_svc.defer_removal.assert_called_once_with("sj1")
-        gw.cron_svc.audit_one_shot_removal.assert_not_called()
+        assert gw.cron_svc.defer_removal.call_args_list == [call("sj1")]
+        assert gw.cron_svc.audit_one_shot_removal.call_count == 0
 
     @pytest.mark.asyncio
     async def test_already_removed_job_is_not_audited(self):
@@ -435,7 +435,7 @@ class TestGatewayDoneRemovalAudit:
         gw = _make_gw()
         job = _make_script_job()
         await _run_done_callback(gw, job, remove_result=False)
-        gw.cron_svc.audit_one_shot_removal.assert_not_called()
+        assert gw.cron_svc.audit_one_shot_removal.call_count == 0
 
     @pytest.mark.asyncio
     async def test_delivery_succeeds_when_audit_raises(self, tmp_path, raising_sel):

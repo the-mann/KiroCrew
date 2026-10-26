@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import call
 
 import pytest
 from slack_handler_helpers import _clean_approval_state  # noqa: F401
@@ -622,13 +623,16 @@ class TestHookIntegration:
             )
 
             # save_conversation_turn should have been called with agent="ops"
-            log.append.assert_any_call(
-                "thread1",
-                "user",
-                "ping",
-                source_thread="thread1",
-                source_user="U1",
-                agent="ops",
+            assert (
+                call(
+                    "thread1",
+                    "user",
+                    "ping",
+                    source_thread="thread1",
+                    source_user="U1",
+                    agent="ops",
+                )
+                in log.append.call_args_list
             )
         finally:
             _hydrated_sessions.discard("thread1")
@@ -669,13 +673,16 @@ class TestHookIntegration:
             )
 
             # save_conversation_turn should have been called with agent="research"
-            log.append.assert_any_call(
-                "thread2",
-                "user",
-                "spawn do stuff",
-                source_thread="thread2",
-                source_user="U1",
-                agent="research",
+            assert (
+                call(
+                    "thread2",
+                    "user",
+                    "spawn do stuff",
+                    source_thread="thread2",
+                    source_user="U1",
+                    agent="research",
+                )
+                in log.append.call_args_list
             )
         finally:
             _hydrated_sessions.discard("thread2")

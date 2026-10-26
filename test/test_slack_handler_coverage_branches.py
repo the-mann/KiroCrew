@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
@@ -436,8 +436,8 @@ class TestCompactCommandFailureArms:
         sessions.get_provider = MagicMock(return_value=_provider(compact_raises=True))
         sessions.discard_conversation = AsyncMock(side_effect=RuntimeError("registry locked"))
         await h._handle_compact_command(slack, sessions, "C1", "t1", "m1", "slack:t1")
-        sessions.discard_conversation.assert_awaited_once_with("slack:t1")
-        sessions.release.assert_called_once_with("slack:t1")
+        assert sessions.discard_conversation.await_args_list == [call("slack:t1")]
+        assert sessions.release.call_args_list == [call("slack:t1")]
 
     @pytest.mark.asyncio
     async def test_reporting_and_audit_failures_are_swallowed(self, sessions, monkeypatch):
@@ -445,7 +445,7 @@ class TestCompactCommandFailureArms:
         sessions.get_provider = MagicMock(return_value=_provider())
         monkeypatch.setattr(h, "sel", _raising_sel(method="log_tool_invocation"))
         await h._handle_compact_command(slack, sessions, "C1", "t1", "m1", "slack:t1")
-        sessions.release.assert_called_once_with("slack:t1")
+        assert sessions.release.call_args_list == [call("slack:t1")]
 
     @pytest.mark.asyncio
     async def test_failed_verdict_reports_the_backend_error(self, sessions):
@@ -521,9 +521,7 @@ class TestCommandHelperEarlyReturns:
         runner = MagicMock()
         runner.running = False
         missing = tmp_path / "no-such-spec.yaml"
-        out = await h._handle_run_command(
-            f"task run {missing}", runner, FlakySlack(), "C1", "t1"
-        )
+        out = await h._handle_run_command(f"task run {missing}", runner, FlakySlack(), "C1", "t1")
         assert out is not None and "Spec file not found" in out
 
     @pytest.mark.asyncio
@@ -566,7 +564,14 @@ class TestAutoTitle:
         slack = FlakySlack()
         h._titled_threads["slack:t1"] = "manual"
         await h._maybe_auto_title_slack(
-            slack, title_sessions, "C1", "slack:t1", None, "hello", "hi there", pin=_PRESENT_PIN,
+            slack,
+            title_sessions,
+            "C1",
+            "slack:t1",
+            None,
+            "hello",
+            "hi there",
+            pin=_PRESENT_PIN,
         )
         assert not [a for a in slack.actions if a[0] == "set_thread_title"]
 
@@ -576,7 +581,14 @@ class TestAutoTitle:
         log = MagicMock()
         log.set_title = MagicMock(side_effect=RuntimeError("log locked"))
         await h._maybe_auto_title_slack(
-            slack, title_sessions, "C1", "slack:t1", log, "hello", "hi there", pin=_PRESENT_PIN,
+            slack,
+            title_sessions,
+            "C1",
+            "slack:t1",
+            log,
+            "hello",
+            "hi there",
+            pin=_PRESENT_PIN,
         )
         titled = [a for a in slack.actions if a[0] == "set_thread_title"]
         assert titled and titled[0][1]["title"] == "Deploy the gateway"
@@ -589,7 +601,14 @@ class TestAutoTitle:
         title_sessions.get_or_create = AsyncMock(return_value=(_TitleClient("SKIP"), None, None))
         h._titled_threads["slack:t1"] = "auto"
         await h._maybe_auto_title_slack(
-            slack, title_sessions, "C1", "slack:t1", None, "hello", "hi", pin=_PRESENT_PIN,
+            slack,
+            title_sessions,
+            "C1",
+            "slack:t1",
+            None,
+            "hello",
+            "hi",
+            pin=_PRESENT_PIN,
         )
         assert "slack:t1" not in h._titled_threads
         assert not [a for a in slack.actions if a[0] == "set_thread_title"]
@@ -642,8 +661,9 @@ class TestHandleMessageKeywordDispatch:
         slack = FlakySlack()
         called: dict = {}
 
-        async def _fake(cmd_text, _slack, channel, reply_ts, msg_ts, session_key, log,
-                        *, sessions=None):
+        async def _fake(
+            cmd_text, _slack, channel, reply_ts, msg_ts, session_key, log, *, sessions=None
+        ):
             called["session_key"] = session_key
 
         monkeypatch.setattr(h, "_handle_sessions_command", _fake)
@@ -693,7 +713,9 @@ class TestHandleMessageKeywordDispatch:
         ("text", "expected"),
         [
             pytest.param(
-                "!dashboard", "Not authorized.", id="test_allowed_user_command_denied_for_a_stranger"
+                "!dashboard",
+                "Not authorized.",
+                id="test_allowed_user_command_denied_for_a_stranger",
             ),
             pytest.param(
                 "!agent kirocrew",

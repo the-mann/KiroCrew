@@ -9,7 +9,7 @@ Covers:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -187,11 +187,17 @@ class TestHandleInlineStop:
             await interactions._handle_inline_stop(payload, action, "C1", "msg_ts", "U_OWNER")
 
         # Immediate feedback: "Stopping..."
-        mock_orch.slack.update_message.assert_any_call("C1", "msg_ts", text="⏹ _Stopping…_")
+        assert (
+            call("C1", "msg_ts", text="⏹ _Stopping…_")
+            in mock_orch.slack.update_message.call_args_list
+        )
         # on_soft callback: "Execution stopped."
-        mock_orch.slack.update_message.assert_any_call("C1", "msg_ts", text="⏹ Execution stopped.")
+        assert (
+            call("C1", "msg_ts", text="⏹ Execution stopped.")
+            in mock_orch.slack.update_message.call_args_list
+        )
         # SEL tool invocation logged
-        mock_sel.return_value.log_tool_invocation.assert_called_once()
+        assert mock_sel.return_value.log_tool_invocation.call_count == 1
 
     @pytest.mark.asyncio
     async def test_hard_stop_callback(self, setup_interactions, mock_orch):
@@ -212,8 +218,9 @@ class TestHandleInlineStop:
             mock_sel.return_value.log_tool_invocation = MagicMock()
             await interactions._handle_inline_stop(payload, action, "C1", "ts1", "U_OWNER")
 
-        mock_orch.slack.update_message.assert_any_call(
-            "C1", "ts1", text="⛔ Execution stopped — session reset."
+        assert (
+            call("C1", "ts1", text="⛔ Execution stopped — session reset.")
+            in mock_orch.slack.update_message.call_args_list
         )
 
     @pytest.mark.asyncio
@@ -335,8 +342,8 @@ class TestHandleSessionEnd:
             mock_sel.return_value.log_api_access = MagicMock()
             await interactions._handle_session_end(payload, action, "C1", "ts1", "U_OWNER")
 
-        mock_orch.sessions.find_key_by_sid.assert_called_once_with(value)
-        mock_orch.sessions.remove.assert_called_once_with(removed)
+        assert mock_orch.sessions.find_key_by_sid.call_args_list == [call(value)]
+        assert mock_orch.sessions.remove.call_args_list == [call(removed)]
 
     @pytest.mark.asyncio
     async def test_end_rejected_for_non_owner(self, setup_interactions, mock_orch, caplog):
@@ -379,8 +386,8 @@ class TestHandleSessionEnd:
             mock_sel.return_value.log_api_access = MagicMock()
             await interactions._handle_session_end(payload, action, "C1", "ts1", "U_OWNER")
 
-        mock_orch.consolidator.consolidate_session.assert_called_once_with("key-1")
-        mock_orch.sessions.remove.assert_called_once_with("key-1")
+        assert mock_orch.consolidator.consolidate_session.call_args_list == [call("key-1")]
+        assert mock_orch.sessions.remove.call_args_list == [call("key-1")]
 
     @pytest.mark.asyncio
     async def test_end_updates_message_when_no_response_url(self, setup_interactions, mock_orch):

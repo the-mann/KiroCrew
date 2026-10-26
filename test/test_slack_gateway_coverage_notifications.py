@@ -13,7 +13,7 @@ import asyncio
 import math
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from slack_gateway_coverage_helpers import _awaited, _make_orchestrator, _mock_dashboard_state
@@ -232,7 +232,7 @@ class TestTaskNotify:
         notify = self._capture(orch)
 
         await notify("Task 3 denied", "nope")
-        orch.slack.post_message.assert_awaited_once_with("D1", "*Task 3 denied*\nnope")
+        assert orch.slack.post_message.await_args_list == [call("D1", "*Task 3 denied*\nnope")]
 
     @pytest.mark.asyncio
     async def test_ordinary_title_does_not_dm(self):

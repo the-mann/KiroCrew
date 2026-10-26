@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from slack_gateway_helpers import _restore_update_check_cache  # noqa: F401
@@ -123,10 +123,10 @@ class TestSubagentSlackInjection:
 
         from kiro_crew.subagent_parts.run_limits import INJECTION_TIMEOUT
 
-        orch.subagent_mgr.notify_injection_failed.assert_called_once_with(
-            info, reason=f"injection timed out after {int(INJECTION_TIMEOUT)}s"
-        )
-        orch.sessions.reset.assert_any_await("cron:job1")
+        assert orch.subagent_mgr.notify_injection_failed.call_args_list == [
+            call(info, reason=f"injection timed out after {int(INJECTION_TIMEOUT)}s")
+        ]
+        assert call("cron:job1") in orch.sessions.reset.await_args_list
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -191,12 +191,12 @@ class TestInjectWithRetry:
         ) as mock_stream:
             await on_done(info)
 
-        mock_stream.assert_awaited_once()
-        orch.sessions.reset.assert_awaited_once_with(info.parent_session_key)
-        orch.subagent_mgr.notify_injection_failed.assert_called_once_with(
-            info, reason="ACP process died"
-        )
-        orch.slack.post_message.assert_not_awaited()
+        assert mock_stream.await_count == 1
+        assert orch.sessions.reset.await_args_list == [call(info.parent_session_key)]
+        assert orch.subagent_mgr.notify_injection_failed.call_args_list == [
+            call(info, reason="ACP process died")
+        ]
+        assert orch.slack.post_message.await_count == 0
 
     @pytest.mark.asyncio
     async def test_prompt_busy_exhausted(self):
@@ -225,12 +225,12 @@ class TestInjectWithRetry:
         ) as mock_stream:
             await on_done(info)
 
-        mock_stream.assert_awaited_once()
-        orch.sessions.reset.assert_awaited_once_with(info.parent_session_key)
-        orch.subagent_mgr.notify_injection_failed.assert_called_once_with(
-            info, reason="provider dead after prompt-busy retries"
-        )
-        orch.slack.post_message.assert_not_awaited()
+        assert mock_stream.await_count == 1
+        assert orch.sessions.reset.await_args_list == [call(info.parent_session_key)]
+        assert orch.subagent_mgr.notify_injection_failed.call_args_list == [
+            call(info, reason="provider dead after prompt-busy retries")
+        ]
+        assert orch.slack.post_message.await_count == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -602,11 +602,11 @@ class TestSubagentChannelTransportDelivery:
         ):
             await on_done(info)
 
-        transport.send_message.assert_awaited_once_with(
-            "12345", "synthesized reply", thread_id=None
-        )
-        orch.slack.post_message.assert_not_awaited()
-        orch.slack.open_dm.assert_not_awaited()
+        assert transport.send_message.await_args_list == [
+            call("12345", "synthesized reply", thread_id=None)
+        ]
+        assert orch.slack.post_message.await_count == 0
+        assert orch.slack.open_dm.await_count == 0
 
     @pytest.mark.asyncio
     async def test_origin_link_wins_over_stored_channel(self):
@@ -632,7 +632,7 @@ class TestSubagentChannelTransportDelivery:
         ):
             await on_done(info)
 
-        transport.send_message.assert_awaited_once_with("C777", "reply", thread_id=None)
+        assert transport.send_message.await_args_list == [call("C777", "reply", thread_id=None)]
 
     @pytest.mark.asyncio
     async def test_slack_parent_still_posts_through_slack_client(self):
@@ -729,7 +729,9 @@ class TestSubagentChannelTransportDelivery:
         ):
             await on_done(info)
 
-        transport.send_message.assert_awaited_once_with("C777", "reply after retry", thread_id="T1")
+        assert transport.send_message.await_args_list == [
+            call("C777", "reply after retry", thread_id="T1")
+        ]
 
     @pytest.mark.asyncio
     async def test_peer_resolution_outcome_is_sel_audited(self):
@@ -841,9 +843,9 @@ class TestSubagentChannelTransportDelivery:
         ):
             await on_done(info)
 
-        transport.send_message.assert_awaited_once_with("987", "reply", thread_id="5")
+        assert transport.send_message.await_args_list == [call("987", "reply", thread_id="5")]
         # A link recorded by the transport is already a postable conversation.
-        transport.resolve_configured_target.assert_not_awaited()
+        assert transport.resolve_configured_target.await_count == 0
 
     @pytest.mark.asyncio
     async def test_unified_parent_uses_stored_channel_value(self):
@@ -864,7 +866,7 @@ class TestSubagentChannelTransportDelivery:
         ):
             await on_done(info)
 
-        transport.send_message.assert_awaited_once_with("12345", "reply", thread_id=None)
+        assert transport.send_message.await_args_list == [call("12345", "reply", thread_id=None)]
 
     @pytest.mark.asyncio
     async def test_stored_peer_id_is_resolved_to_a_postable_conversation(self):
@@ -887,8 +889,8 @@ class TestSubagentChannelTransportDelivery:
         ):
             await on_done(info)
 
-        transport.resolve_configured_target.assert_awaited_once_with("user:U999")
-        transport.send_message.assert_awaited_once_with("DM123", "reply", thread_id=None)
+        assert transport.resolve_configured_target.await_args_list == [call("user:U999")]
+        assert transport.send_message.await_args_list == [call("DM123", "reply", thread_id=None)]
 
     @pytest.mark.asyncio
     async def test_unreachable_peer_fails_closed(self):

@@ -12,7 +12,7 @@ Conventions follow ``test_slack_events_coverage.py``: a ``MagicMock`` stand-in f
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from slack_events_coverage_helpers import _fresh_trusted_bot_turn_ledger  # noqa: F401
@@ -235,9 +235,9 @@ class TestRouteMessageGuards:
         with patch("kiro_crew.slack.events.is_allowed_user", return_value=True):
             with patch("kiro_crew.slack.events.is_owner", return_value=True):
                 await ev._route_message(orch, _event(text="!stop"), ev.SeenCache())
-        orch.sessions.note_stop.assert_called_once_with("100.0")
-        orch.sessions.stop_turn.assert_not_awaited()
-        orch.slack.post_message.assert_awaited_with("D1", "Nothing running.", "100.0")
+        assert orch.sessions.note_stop.call_args_list == [call("100.0")]
+        assert orch.sessions.stop_turn.await_count == 0
+        assert orch.slack.post_message.await_args == call("D1", "Nothing running.", "100.0")
 
     @pytest.mark.asyncio
     async def test_stop_is_recorded_against_the_threads_owning_session(self):
@@ -252,8 +252,8 @@ class TestRouteMessageGuards:
         with patch("kiro_crew.slack.events.is_allowed_user", return_value=True):
             with patch("kiro_crew.slack.events.is_owner", return_value=True):
                 await ev._route_message(orch, _event(text="!stop"), ev.SeenCache())
-        orch.sessions.get_session_for_thread.assert_called_with("100.0")
-        orch.sessions.note_stop.assert_called_once_with("dashboard:chat-7")
+        assert orch.sessions.get_session_for_thread.call_args == call("100.0")
+        assert orch.sessions.note_stop.call_args_list == [call("dashboard:chat-7")]
 
     @pytest.mark.asyncio
     async def test_flat_dm_stop_targets_a_dashboard_linked_thread_owner(self):
@@ -317,8 +317,8 @@ class TestRouteMessageGuards:
                     return_value=False,
                 ) as gate:
                     await ev._route_message(orch, _event(text="!stop"), ev.SeenCache())
-        gate.assert_not_called()
-        orch.slack.post_message.assert_awaited_with("D1", "Nothing running.", "100.0")
+        assert gate.call_count == 0
+        assert orch.slack.post_message.await_args == call("D1", "Nothing running.", "100.0")
 
     @pytest.mark.asyncio
     async def test_display_name_resolved_from_slack(self):

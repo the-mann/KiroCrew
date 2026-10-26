@@ -83,8 +83,8 @@ class TestCronMessageDenialAndWiring:
         svc = _cron_service_double()
         async with _cron_cb(orch, svc=svc):
             pass
-        svc.start.assert_awaited_once()
-        svc.start_reaper.assert_not_called()
+        assert svc.start.await_count == 1
+        assert svc.start_reaper.call_count == 0
 
 
 class TestCronResolvesAgentAlias:

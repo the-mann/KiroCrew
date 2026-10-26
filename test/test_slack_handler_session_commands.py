@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import call
 
 import pytest
 from slack_handler_helpers import _clean_approval_state  # noqa: F401
@@ -468,7 +469,7 @@ class TestAutoTitleSlack:
             "U_OWNER",
             conversation_log=mock_log,
         )
-        mock_log.set_title.assert_called_once_with("thread1", "ETL Debug")
+        assert mock_log.set_title.call_args_list == [call("thread1", "ETL Debug")]
 
 
 class TestCompactCommand:

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 from slack_handler_coverage_helpers import (  # noqa: F401 -- fixtures are requested by name
@@ -210,7 +210,7 @@ class TestSafeUpdates:
         broken = MagicMock()
         broken.update_message = AsyncMock(side_effect=RuntimeError("gone"))
         await h._safe_update(broken, "C1", "m1", "hi")
-        broken.update_message.assert_awaited_once_with("C1", "m1", "hi")
+        assert broken.update_message.await_args_list == [call("C1", "m1", "hi")]
 
     @pytest.mark.asyncio
     async def test_final_update_splits_long_text(self, slack):
@@ -236,7 +236,7 @@ class TestSafeUpdates:
         provider = MagicMock()
         provider.reject_tool = AsyncMock(side_effect=RuntimeError("dead"))
         await h._reject_orphaned_tool(provider, "r1")
-        provider.reject_tool.assert_awaited_once_with("r1")
+        assert provider.reject_tool.await_args_list == [call("r1")]
 
     @pytest.mark.asyncio
     async def test_safe_voice_reply_never_raises(self, slack, monkeypatch):

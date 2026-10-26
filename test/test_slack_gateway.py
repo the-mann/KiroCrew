@@ -16,7 +16,7 @@ import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from slack_gateway_helpers import _mock_context_builder  # noqa: F401
@@ -597,10 +597,10 @@ class TestDeliverResult:
         ds.get_or_create_slot = MagicMock(return_value=slot)
         orch.dashboard_state = ds
         await orch._deliver_result("Title", "task", "result", "dashboard")
-        slot.append.assert_called_once_with("assistant", "Title\n\nresult", "msg msg-a")
-        ds.notify.assert_called_once_with(
-            "heartbeat", "Title", "task\n\nresult", meta={"slot": slot.key}
-        )
+        assert slot.append.call_args_list == [call("assistant", "Title\n\nresult", "msg msg-a")]
+        assert ds.notify.call_args_list == [
+            call("heartbeat", "Title", "task\n\nresult", meta={"slot": slot.key})
+        ]
 
     @pytest.mark.asyncio
     async def test_dashboard_specific_slot(self):
@@ -614,11 +614,11 @@ class TestDeliverResult:
         with patch("kiro_crew.slack.gateway.sel") as mock_sel:
             mock_sel.return_value.log_api_access = MagicMock()
             await orch._deliver_result("Title", "task", "result", "dashboard:my-slot")
-        ds.resolve_slot.assert_called_with("my-slot")
-        slot.append.assert_called_once_with("assistant", "Title\n\nresult", "msg msg-a")
-        ds.notify.assert_called_once_with(
-            "heartbeat", "Title", "task\n\nresult", meta={"slot": "my-slot"}
-        )
+        assert ds.resolve_slot.call_args == call("my-slot")
+        assert slot.append.call_args_list == [call("assistant", "Title\n\nresult", "msg msg-a")]
+        assert ds.notify.call_args_list == [
+            call("heartbeat", "Title", "task\n\nresult", meta={"slot": "my-slot"})
+        ]
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -642,16 +642,18 @@ class TestDeliverResult:
         with patch("kiro_crew.slack.gateway.sel") as mock_sel:
             mock_sel.return_value.log_api_access = MagicMock()
             await orch._deliver_result("Title", "task", "result", deliver)
-        ds.resolve_slot.assert_called_once_with("gone")
-        mock_sel.return_value.log_api_access.assert_called_once_with(
-            caller="heartbeat",
-            operation=operation,
-            outcome="not_found",
-            source="gateway",
-            resources="requested=gone",
-        )
-        ds.notify.assert_not_called()
-        ds.push_slots_update.assert_not_called()
+        assert ds.resolve_slot.call_args_list == [call("gone")]
+        assert mock_sel.return_value.log_api_access.call_args_list == [
+            call(
+                caller="heartbeat",
+                operation=operation,
+                outcome="not_found",
+                source="gateway",
+                resources="requested=gone",
+            )
+        ]
+        assert ds.notify.call_count == 0
+        assert ds.push_slots_update.call_count == 0
 
     @pytest.mark.asyncio
     async def test_slack_dm_delivery(self):
@@ -769,8 +771,8 @@ class TestShutdown:
 
         await orch._shutdown()
 
-        orch.autonudge_svc.shutdown.assert_awaited_once()
-        orch.autonudge_svc.settle_admitted_writes.assert_awaited_once()
+        assert orch.autonudge_svc.shutdown.await_count == 1
+        assert orch.autonudge_svc.settle_admitted_writes.await_count == 1
 
     @pytest.mark.asyncio
     async def test_shutdown_drains_autonudge_before_session_storage_close(self):
@@ -1265,8 +1267,8 @@ class TestShutdown:
         orch._dashboard_runner = MagicMock()
         orch._dashboard_runner.cleanup = AsyncMock()
         await orch._shutdown()
-        orch.cron_svc.stop.assert_awaited_once()
-        orch.heartbeat_svc.stop.assert_called_once()
+        assert orch.cron_svc.stop.await_count == 1
+        assert orch.heartbeat_svc.stop.call_count == 1
 
     @pytest.mark.asyncio
     async def test_shutdown_releases_the_subagent_task_store(self):

@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import threading
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from slack_events_coverage_helpers import _fresh_trusted_bot_turn_ledger  # noqa: F401
@@ -78,7 +78,7 @@ class TestRouteMessageStopCommand:
         with patch("kiro_crew.slack.events.is_allowed_user", return_value=True):
             with patch("kiro_crew.slack.events.is_owner", return_value=True):
                 await ev._route_message(orch, _event(text="!stop"), ev.SeenCache())
-        orch.slack.post_message.assert_awaited_with("D1", "Nothing running.", "100.0")
+        assert orch.slack.post_message.await_args == call("D1", "Nothing running.", "100.0")
 
     @pytest.mark.asyncio
     async def test_bang_restart_delegates_to_restart_handler(self):
@@ -105,8 +105,10 @@ class TestRouteMessageQueueing:
         with patch("kiro_crew.slack.events.is_allowed_user", return_value=True):
             with patch("kiro_crew.slack.events.handle_message", new_callable=AsyncMock) as hm:
                 await ev._route_message(orch, _event(), ev.SeenCache())
-        hm.assert_not_called()
-        orch.slack.add_reaction.assert_awaited_once_with("D1", "100.0", "hourglass_flowing_sand")
+        assert hm.call_count == 0
+        assert orch.slack.add_reaction.await_args_list == [
+            call("D1", "100.0", "hourglass_flowing_sand")
+        ]
 
     @pytest.mark.asyncio
     async def test_busy_session_without_session_object_uses_pending_queue(self):
@@ -502,9 +504,9 @@ class TestRouteMessageEnterpriseAndObserve:
         with patch("kiro_crew.slack.events.is_allowed_user", return_value=False) as allowed:
             with patch("kiro_crew.slack.events.handle_message", new_callable=AsyncMock) as hm:
                 await ev._route_message(orch, _event(), ev.SeenCache())
-        allowed.assert_any_call("U_OWNER")
-        orch.channel_history.push.assert_not_called()
-        hm.assert_not_called()
+        assert call("U_OWNER") in allowed.call_args_list
+        assert orch.channel_history.push.call_count == 0
+        assert hm.call_count == 0
 
 
 class TestRouteMessageTempCleanup:

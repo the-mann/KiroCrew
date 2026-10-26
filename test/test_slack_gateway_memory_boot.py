@@ -134,10 +134,10 @@ class TestAutoMigrateMemory:
             patch.object(orch, "_set_memory_migrated", set_migrated),
         ):
             await orch._auto_migrate_memory()
-        store.migrate_from_markdown.assert_not_called()
-        set_migrated.assert_not_awaited()
+        assert store.migrate_from_markdown.call_count == 0
+        assert set_migrated.await_count == 0
         # Phase 2 sweep still runs (independent of the migrated flag).
-        store.backfill_missing_embeddings.assert_called_once()
+        assert store.backfill_missing_embeddings.call_count == 1
 
     @pytest.mark.asyncio
     async def test_sweep_deferred_when_model_not_ready(self):
@@ -156,8 +156,8 @@ class TestAutoMigrateMemory:
             patch.object(orch, "_set_memory_migrated", AsyncMock()),
         ):
             await orch._auto_migrate_memory()
-        not_ready.wait_ready.assert_called_once()
-        store.backfill_missing_embeddings.assert_not_called()
+        assert not_ready.wait_ready.call_count == 1
+        assert store.backfill_missing_embeddings.call_count == 0
 
     @pytest.mark.asyncio
     async def test_fresh_install_no_legacy_still_flips_migrated(self):
@@ -198,8 +198,8 @@ class TestAutoMigrateMemory:
         ):
             await orch._auto_migrate_memory()
         # Migrated even though the model was absent; sweep ran after the wait.
-        store.migrate_from_markdown.assert_called_once()
-        store.backfill_missing_embeddings.assert_called_once()
+        assert store.migrate_from_markdown.call_count == 1
+        assert store.backfill_missing_embeddings.call_count == 1
 
     @pytest.mark.asyncio
     async def test_migrate_error_leaves_flag_false_and_survives(self):

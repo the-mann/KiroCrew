@@ -208,20 +208,17 @@ def test_no_module_converts_slack_markdown_directly() -> None:
     instead of shipping a silent credential-disclosure path.
     """
     violations = collect_repo_violations()
-    if violations:
-        detail = "\n".join(
-            f"  {path}:{lineno}  {name}(...)" for path, lineno, name in violations
-        )
-        raise AssertionError(
-            "to_slack_mrkdwn called outside kiro_crew/slack/format.py.\n\n"
-            "Neither redact-then-convert nor convert-then-redact is safe on its "
-            "own (the ANSI strip reassembles split credentials; the 39,000-char "
-            "self-truncation cuts them in half). Use render_for_slack() for a "
-            "parts list, or render_one_for_slack() for a single-string sink.\n"
-            "If a direct call is genuinely correct, add a trailing "
-            "'# render-ok: <reason>' comment.\n\n"
-            f"{detail}"
-        )
+    detail = "\n".join(f"  {path}:{lineno}  {name}(...)" for path, lineno, name in violations)
+    assert not violations, (
+        "to_slack_mrkdwn called outside kiro_crew/slack/format.py.\n\n"
+        "Neither redact-then-convert nor convert-then-redact is safe on its "
+        "own (the ANSI strip reassembles split credentials; the 39,000-char "
+        "self-truncation cuts them in half). Use render_for_slack() for a "
+        "parts list, or render_one_for_slack() for a single-string sink.\n"
+        "If a direct call is genuinely correct, add a trailing "
+        "'# render-ok: <reason>' comment.\n\n"
+        f"{detail}"
+    )
 
 
 # ── Meta-tests: prove the detector both fires and stays quiet ─────────────────
@@ -338,9 +335,9 @@ class TestRenderForSlackOrdering:
         cut = SLACK_MAX_TEXT // 2 - len(CONTINUATION)
         filler = "q" * (cut - 12)
         content = filler + obfuscated + ("z" * 200)
-        assert len(filler) < cut < len(filler) + len(obfuscated), (
-            "the credential must straddle the cut for this test to mean anything"
-        )
+        assert (
+            len(filler) < cut < len(filler) + len(obfuscated)
+        ), "the credential must straddle the cut for this test to mean anything"
         body = "".join(render_for_slack(content, redactor=_fake_redactor))
         assert _SECRET not in body
         assert _SECRET[:8] not in body
@@ -358,9 +355,7 @@ class TestRenderForSlackOrdering:
         Decorating a maximally-sized part after the split is what pushed the
         backfill's icon-prefixed messages past SLACK_MSG_LIMIT.
         """
-        parts = render_for_slack(
-            "z" * (SLACK_MSG_LIMIT * 3), prefix="🤖 ", redactor=_fake_redactor
-        )
+        parts = render_for_slack("z" * (SLACK_MSG_LIMIT * 3), prefix="🤖 ", redactor=_fake_redactor)
         assert len(parts) > 1
         assert all(p.startswith("🤖 ") for p in parts)
         assert all(len(p) <= SLACK_MSG_LIMIT for p in parts)
@@ -800,9 +795,9 @@ class TestHeaderCaptionsAreRedactedAtTheSeam:
             header=header,
             redactor=_fake_redactor,
         )
-        assert all(len(p) <= SLACK_MSG_LIMIT for p in parts), (
-            "a caption pushed a part past the limit"
-        )
+        assert all(
+            len(p) <= SLACK_MSG_LIMIT for p in parts
+        ), "a caption pushed a part past the limit"
 
     def test_an_empty_body_still_yields_the_caption(self) -> None:
         """The cron path attaches an ack button to the first part."""
@@ -846,9 +841,9 @@ class TestFencedCodeSurvivesThePreSplit:
         were also treated as code.
         """
         body = "".join(render_for_slack(self._long_fence(), redactor=_fake_redactor))
-        assert body.count("**not_bold_in_code**") == 1_200, (
-            "later blocks lost fence state and had their code rewritten"
-        )
+        assert (
+            body.count("**not_bold_in_code**") == 1_200
+        ), "later blocks lost fence state and had their code rewritten"
 
     def test_the_fence_tracker_agrees_with_the_converter(self) -> None:
         assert ends_inside_code_fence("```py\nx = 1") is True
@@ -911,12 +906,12 @@ class TestRenderOneForSlackOrdering:
     def test_keep_tables_can_be_forced_by_the_caller(self) -> None:
         """The streaming sink renders tables itself, so it forces raw pipes."""
         table = "| a | b |\n| - | - |\n| 1 | 2 |"
-        assert "| a | b |" in render_one_for_slack(
-            table, keep_tables=True, redactor=_fake_redactor
-        ).text
         assert (
-            "*a:*"
-            in render_one_for_slack(table, keep_tables=False, redactor=_fake_redactor).text
+            "| a | b |"
+            in render_one_for_slack(table, keep_tables=True, redactor=_fake_redactor).text
+        )
+        assert (
+            "*a:*" in render_one_for_slack(table, keep_tables=False, redactor=_fake_redactor).text
         )
 
     def test_keep_tables_can_only_add_rawness_never_remove_it(self) -> None:
@@ -1011,9 +1006,7 @@ class TestOptionsChoicesAreRedacted:
     """
 
     def test_checkbox_labels_and_values_are_redacted(self) -> None:
-        blocks = build_options_blocks(
-            [f"Retry with {_SECRET}", "Abort"], redactor=_fake_redactor
-        )
+        blocks = build_options_blocks([f"Retry with {_SECRET}", "Abort"], redactor=_fake_redactor)
         payload = json.dumps(blocks)
         assert _SECRET not in payload
         assert "[REDACTED]" in payload
@@ -1059,9 +1052,9 @@ def test_default_redactor_is_the_platform_shim() -> None:
     import kiro_crew.slack.format as fmt
 
     src = pathlib.Path(fmt.__file__).read_text(encoding="utf-8")
-    assert src.count("redact_via_context") >= 2, (
-        "both render helpers must default to redact_via_context"
-    )
+    assert (
+        src.count("redact_via_context") >= 2
+    ), "both render helpers must default to redact_via_context"
 
 
 @pytest.mark.parametrize("limit", [1, 5, len(CONTINUATION), len(CONTINUATION) + 1])
