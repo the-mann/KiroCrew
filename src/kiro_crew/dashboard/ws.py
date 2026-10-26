@@ -16,6 +16,7 @@ from aiohttp import WSCloseCode, WSMsgType, web
 from kiro_crew import __version__ as _local_version
 from kiro_crew import shutdown_event
 from kiro_crew.constants import crew_log_enabled
+from kiro_crew.dashboard import websocket_hub as _ws_hub
 from kiro_crew.dashboard.chat_utils import effective_session_key, subagent_event_slot
 from kiro_crew.dashboard.origin import check_origin
 from kiro_crew.dashboard.slot_retention import note_foreground
@@ -1027,6 +1028,8 @@ async def _serve_ws(
     ws[SLOT_PATCH_WS_FLAG] = bool(ws["_is_dashboard_user"]) and (
         SLOT_PATCH_CAPABILITY in declared_caps
     )
+    # ``fold_delta.1``: send this tab only the boards it watches (dashboard users only).
+    state.set_fold_delta_capable(ws, _ws_hub.FOLD_DELTA_CAPABILITY in declared_caps)
 
     # Push current slots immediately so sidebar populates without waiting.
     # App tokens get only the slots their manifest scope allows.
@@ -1129,6 +1132,10 @@ async def _serve_ws(
             logger.warning("slots connect snapshot failed to serialize", exc_info=True)
             raise
         await ws.send_str(snapshot_payload)
+        # After the snapshot (the first frame by contract): ask a capable tab for its watch.
+        if ws.get(_ws_hub.FOLD_DELTA_WS_FLAG, False):
+            hello = {"type": _ws_hub.FOLD_HELLO_FRAME, "data": _ws_hub.fold_hello_payload()}
+            await ws.send_str(json.dumps(hello))
         # One-shot per-member event-log baseline, to THIS socket only, right
         # after the connect snapshot and before any later broadcast can reach
         # it -- so the client's held member_projection frames can be pruned
@@ -1880,6 +1887,8 @@ async def _serve_ws(
                         state.unsubscribe_subagents(ws)
                         if _replay_queue is not None:
                             _replay_queue.clear()
+                    elif msg_type == "fold_watch":  # replaces the set; no-op unless capable
+                        state.set_fold_watch(ws, data.get("slots"))
                     elif msg_type == "slot_focused":
                         if not owner_request:
                             # SEL: the owner gate is a permission decision —
