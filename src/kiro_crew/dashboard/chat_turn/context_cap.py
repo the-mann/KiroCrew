@@ -4,7 +4,7 @@ A goal conductor's KAS chat over its marks is trimmed at a dashboard turn's star
 before the turn claims its session: the KAS conversation ends through
 ``discard_conversation(replay=True)``, and the session the turn then starts is seeded
 with a trim note, the session-ledger snapshot and a longer text tail of the transcript.
-No model call is spent, and the transcript on disk gains only the notice row.
+No model call is spent, and the transcript on disk gains only a hidden marker row.
 """
 
 from __future__ import annotations
@@ -54,12 +54,13 @@ CONTEXT_CAP_TRIM_NOTE = (
     "transcript: search_chat_history searches it and get_chat_session reads it.]"
 )
 
-#: The notice row a trim leaves in the transcript, for the person. It names only the
-#: reading that fired: where the new session lands is known after its first request.
-#: The restart notices' memory sentence follows it.
-CONTEXT_CAP_NOTICE_TEXT = (
-    "♻️ Context reached {reached}K tokens, so the session was restarted on a shorter context."
-)
+#: The content of the row a trim leaves in the transcript: a bare zero-width space.
+#: The person is not told about a trim, since there is nothing for them to do about
+#: it, so the row is invisible-only and every transcript view and roster preview skips
+#: it, as it skips a quiet monitor cycle's reply (``website/src/utils/invisibleText.ts``,
+#: ``preview_text.drop_format_chars``). The row stays as the durable record that a
+#: trim happened and at which reading.
+CONTEXT_CAP_MARKER_CONTENT = "\u200b"
 
 
 @dataclass
@@ -276,22 +277,23 @@ def _remember_context_cap_trim(session_key: str) -> None:
 
 
 def _append_context_cap_notice(state: DashboardState, slot: _ChatSlot, tokens: int) -> None:
-    """One notice row per trim, drawn by the compaction card; the replay skips it."""
-    from kiro_crew.context_assembly.replay import CONTEXT_CAP_NOTICE
-    from kiro_crew.dashboard.state import _RESTART_MEMORY_TAIL
+    """One hidden marker row per trim, carrying the reading that fired; the replay skips it.
 
-    text = CONTEXT_CAP_NOTICE_TEXT.format(reached=round(tokens / 1000))
+    No ``meta.kind``: a ``compaction`` kind would draw the row as a compaction card.
+    """
+    from kiro_crew.context_assembly.replay import CONTEXT_CAP_NOTICE
+
     try:
         append_and_surface(
             state,
             slot,
             "assistant",
-            f"{text} {_RESTART_MEMORY_TAIL}",
+            CONTEXT_CAP_MARKER_CONTENT,
             "msg msg-a",
-            meta={"kind": "compaction", "notice": CONTEXT_CAP_NOTICE},
+            meta={"notice": CONTEXT_CAP_NOTICE, "context_tokens": tokens},
         )
     except Exception:
-        logger.debug("Context cap: notice row failed for slot %s", slot.key, exc_info=True)
+        logger.debug("Context cap: marker row failed for slot %s", slot.key, exc_info=True)
 
 
 def _spend_context_cap_seed(session_key: str) -> None:

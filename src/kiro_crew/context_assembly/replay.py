@@ -281,14 +281,14 @@ _REPLAY_INJECT_MAX_ROWS = (
 
 _REPLAY_CONVERSATION_MAX_ROWS = 500
 
-#: ``meta.notice`` on the row the conductor context cap appends when it trims a
-#: session (``dashboard/chat_turn/context_cap.py``). The row is for the person: the
-#: trimmed session learns of the trim from its seed, so no replay carries the row.
+#: ``meta.notice`` on the hidden marker row the conductor context cap appends when it
+#: trims a session (``dashboard/chat_turn/context_cap.py``). The row records the trim:
+#: the trimmed session learns of it from its seed, so no replay carries the row.
 CONTEXT_CAP_NOTICE = "context_cap"
 
 
 def is_context_cap_notice(row: dict) -> bool:
-    """Whether *row* is the conductor context cap's notice row."""
+    """Whether *row* is the conductor context cap's marker row."""
     meta = row.get("meta")
     return isinstance(meta, dict) and meta.get("notice") == CONTEXT_CAP_NOTICE
 

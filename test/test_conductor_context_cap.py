@@ -30,7 +30,6 @@ from turn_harness import TurnScript, run_turn
 from kiro_crew.acp.types import EVENT_COMPLETE, EVENT_TEXT_CHUNK, STOP_REASON_END_TURN, AcpEvent
 from kiro_crew.context import build_session_replay
 from kiro_crew.dashboard import chat_runner
-from kiro_crew.dashboard.state import _RESTART_MEMORY_TAIL
 
 KEY = "dashboard:member-kirocrew-conductor"
 CONDUCTOR = "kirocrew-conductor"
@@ -181,14 +180,29 @@ async def test_rule_a_trims_a_session_over_400k_at_a_turn_start(tmp_path):
     assert await _check(state, slot) == "trimmed"
 
     assert sessions.discards == [(KEY, True, True)]
-    [notice] = _notices(slot)
-    assert notice["role"] == "assistant"
-    assert notice["meta"]["kind"] == "compaction"
-    assert notice["content"] == (
-        "♻️ Context reached 412K tokens, so the session was restarted on a shorter context. "
-        + _RESTART_MEMORY_TAIL
-    )
+    [marker] = _notices(slot)
+    assert marker["role"] == "assistant"
+    assert marker["meta"]["context_tokens"] == 412_000
     assert chat_runner._take_context_cap_seed(KEY) is True
+
+
+@pytest.mark.asyncio
+async def test_a_trim_leaves_no_row_the_person_sees(tmp_path):
+    """The marker is invisible-only and carries no card kind, so no view draws it."""
+    from kiro_crew.preview_text import speech_preview
+
+    sessions = _Sessions(_Provider(412_000), idle_secs=0.0)
+    state, slot = _conductor(tmp_path, sessions)
+
+    assert await _check(state, slot) == "trimmed"
+
+    [marker] = slot.messages
+    assert "kind" not in marker["meta"]
+    assert not marker.get("variants") and not marker["meta"].get("file_changes")
+    # The transcript's hidden-row test (website/src/utils/invisibleText.ts) and the
+    # roster preview both read an invisible-only row as nothing.
+    assert marker["content"].strip() and speech_preview(marker["content"]) == ""
+    assert "Context reached" not in marker["content"]
 
 
 @pytest.mark.asyncio
@@ -480,17 +494,34 @@ async def test_the_trim_notice_row_is_not_replayed(tmp_path, snapshot_reads):
     state, slot = _conductor(tmp_path, sessions)
     _transcript(state, rows=4, size=10)
     assert await _check(state, slot) == "trimmed"
-    [notice] = _notices(slot)
-    state.conversation_log.append(KEY, "assistant", notice["content"], extra_meta=notice["meta"])
+    [marker] = _notices(slot)
+    state.conversation_log.append(KEY, "assistant", marker["content"], extra_meta=marker["meta"])
     state.conversation_log.append(KEY, "user", "after the trim")
 
     seed = await _replay(state, slot)
 
+    assert seed.startswith(chat_runner.CONTEXT_CAP_TRIM_NOTE)
     assert "after the trim" in seed
-    assert "Context reached" not in seed
+    assert chat_runner.CONTEXT_CAP_MARKER_CONTENT not in seed
     later = build_session_replay(state.conversation_log, KEY)
     assert later is not None and "after the trim" in later
-    assert "Context reached" not in later
+    assert chat_runner.CONTEXT_CAP_MARKER_CONTENT not in later
+
+
+@pytest.mark.asyncio
+async def test_the_marker_row_on_disk_still_reads_as_the_trim(tmp_path):
+    """A durable reader finds each trim and its reading from the transcript alone."""
+    from kiro_crew.context_assembly.replay import is_context_cap_notice
+
+    sessions = _Sessions(_Provider(412_000))
+    state, slot = _conductor(tmp_path, sessions)
+    assert await _check(state, slot) == "trimmed"
+    [marker] = slot.messages
+    state.conversation_log.append(KEY, "assistant", marker["content"], extra_meta=marker["meta"])
+
+    rows = state.conversation_log.read_messages_chained(KEY)
+
+    assert [r["meta"]["context_tokens"] for r in rows if is_context_cap_notice(r)] == [412_000]
 
 
 @pytest.mark.asyncio
